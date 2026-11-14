@@ -89,7 +89,9 @@ function rateLimit({ windowMs, max }) {
   };
 }
 
-function createApi({ db, env = process.env, fetchImpl = fetch, payments } = {}) {
+const defaultLookup = (host) => require('dns').promises.lookup(host, { all: true });
+
+function createApi({ db, env = process.env, fetchImpl = fetch, payments, dnsLookup = defaultLookup } = {}) {
   const JWT_SECRET = env.JWT_SECRET;
   if (!JWT_SECRET || JWT_SECRET.length < 32) throw new Error('JWT_SECRET must be set (32+ characters)');
   const PLANS = loadPlans(env);
@@ -216,6 +218,37 @@ function createApi({ db, env = process.env, fetchImpl = fetch, payments } = {}) 
       serverCache = { at: Date.now(), list: [...live, ...planned] };
     }
     res.json({ servers: serverCache.list });
+  });
+
+  // ---------- leak test ----------
+  // Where the visitor's traffic appears to come from, and whether that's one of our exit servers.
+  // Exit IPs come from each server's optional `exitIps`, else its wgHost resolved (cached 10 minutes).
+  let exitCache = { at: 0, ips: new Map() };
+  async function exitIps() {
+    if (Date.now() - exitCache.at < 600000) return exitCache.ips;
+    const ips = new Map();
+    await Promise.all(SERVERS.map(async (srv) => {
+      const list = Array.isArray(srv.exitIps) ? srv.exitIps : [];
+      for (const ip of list) ips.set(ip, srv.id);
+      if (!list.length && srv.wgHost) {
+        try {
+          for (const a of await dnsLookup(srv.wgHost)) ips.set(a.address, srv.id);
+        } catch { /* unresolvable host: skip */ }
+      }
+    }));
+    exitCache = { at: Date.now(), ips };
+    return ips;
+  }
+
+  api.get('/ip', async (req, res) => {
+    // Cloudflare puts the real visitor address here; behind it req.ip is Cloudflare's edge.
+    const ip = String(req.headers['cf-connecting-ip'] || req.ip || '').replace(/^::ffff:/, '');
+    const serverId = (await exitIps()).get(ip) || null;
+    const srv = SERVERS.find((s) => s.id === serverId);
+    res.set('Cache-Control', 'no-store').json({
+      ip, country: req.headers['cf-ipcountry'] || null, protected: Boolean(serverId),
+      server: srv ? { id: srv.id, city: srv.city, country: srv.country } : null,
+    });
   });
 
   // ---------- devices + WireGuard ----------

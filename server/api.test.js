@@ -33,7 +33,8 @@ async function setup({ withPayments = true } = {}) {
   };
   const app = express();
   app.set('trust proxy', 'loopback');
-  app.use('/api', createApi({ db, env, fetchImpl, payments }));
+  const dnsLookup = async (host) => (host === 'nyc.example' ? [{ address: '198.51.100.20' }] : []);
+  app.use('/api', createApi({ db, env, fetchImpl, payments, dnsLookup }));
   const server = await new Promise((r) => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
   const base = `http://127.0.0.1:${server.address().port}/api`;
   const call = async (method, path, body, token, headers = {}) => {
@@ -151,6 +152,17 @@ test('webhook: bad signature rejected, valid one upgrades once', async () => {
     assert.equal((await t.call('POST', '/payments/korapay/webhook', body, null, { 'x-korapay-signature': sig })).status, 200);
     assert.equal((await t.call('POST', '/payments/korapay/webhook', body, null, { 'x-korapay-signature': sig })).body.duplicate, true);
     assert.equal((await t.call('GET', '/auth/me', undefined, token)).body.user.planId, 'vip');
+  } finally { t.close(); }
+});
+
+test('leak test: reports the visitor IP and whether it is a Royal-VPN exit', async () => {
+  const t = await setup();
+  try {
+    const plain = await t.call('GET', '/ip', undefined, null, { 'cf-connecting-ip': '203.0.113.7', 'cf-ipcountry': 'NG' });
+    assert.deepEqual([plain.body.ip, plain.body.protected, plain.body.country], ['203.0.113.7', false, 'NG']);
+    const viaVpn = await t.call('GET', '/ip', undefined, null, { 'cf-connecting-ip': '198.51.100.20' });
+    assert.equal(viaVpn.body.protected, true);
+    assert.equal(viaVpn.body.server.city, 'New York');
   } finally { t.close(); }
 });
 

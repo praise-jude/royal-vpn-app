@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "Royal-VPN",
-    "slug": "Royal-VPN",
+    "slug": "royal-vpn",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true
     },
@@ -16,7 +16,9 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.judeewah.royalvpn",
+      "versionCode": 3
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -24,6 +26,13 @@
     "plugins": [
       "expo-secure-store",
       "expo-web-browser"
-    ]
+    ],
+    "scheme": "royalvpn",
+    "owner": "judeewahs-team",
+    "extra": {
+      "eas": {
+        "projectId": "37996b7d-3ff7-44e1-8c7b-ec134c9313f4"
+      }
+    }
   }
 }

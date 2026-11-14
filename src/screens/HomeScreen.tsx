@@ -4,6 +4,7 @@ import { FontAwesome6 } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { colors, font, radii } from '../theme';
 import { useVpnStore, useSelectedServer, fmtDuration } from '../store/useVpnStore';
+import { vpn, fmtBytes } from '../lib/vpn';
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
@@ -12,30 +13,35 @@ export default function HomeScreen() {
   const error = useVpnStore((s) => s.error);
   const needsUpgrade = useVpnStore((s) => s.needsUpgrade);
   const killSwitch = useVpnStore((s) => s.killSwitch);
-  const autoConnect = useVpnStore((s) => s.autoConnect);
+  const blockAds = useVpnStore((s) => s.blockAds);
+  const guardActive = useVpnStore((s) => s.guardActive);
   const serversLoading = useVpnStore((s) => s.serversLoading);
   const toggleConnect = useVpnStore((s) => s.toggleConnect);
   const clearError = useVpnStore((s) => s.clearError);
-  const toggleKillSwitch = useVpnStore((s) => s.toggleKillSwitch);
-  const toggleAutoConnect = useVpnStore((s) => s.toggleAutoConnect);
+  const setKillSwitch = useVpnStore((s) => s.setKillSwitch);
+  const setBlockAds = useVpnStore((s) => s.setBlockAds);
   const server = useSelectedServer();
 
   const connected = status === 'connected';
   const connecting = status === 'connecting';
 
-  // Re-render every second while connected so the timer moves.
+  // Tick every second while connected: moves the timer and refreshes the data counters.
+  const [traffic, setTraffic] = useState({ rxBytes: 0, txBytes: 0 });
   const [, setNow] = useState(0);
   useEffect(() => {
     if (!connected) return;
-    const id = setInterval(() => setNow((n) => n + 1), 1000);
+    const id = setInterval(() => {
+      setNow((n) => n + 1);
+      vpn.stats().then(setTraffic).catch(() => {});
+    }, 1000);
     return () => clearInterval(id);
   }, [connected]);
   const seconds = connectedAt ? Math.floor((Date.now() - connectedAt) / 1000) : 0;
 
   const btnBg = connecting ? '#4B5563' : connected ? colors.blue : colors.orange;
   const label = connecting ? 'Connecting…' : connected ? 'PROTECTED' : 'CONNECT';
-  const statusLine = connecting ? 'Securing your connection…' : connected ? 'Your connection is protected' : 'You are not protected';
-  const statusDot = connected ? colors.green : connecting ? colors.yellow : colors.red;
+  const statusLine = connecting ? 'Securing your connection…' : connected ? 'Your connection is protected' : guardActive ? 'Traffic blocked until you reconnect' : 'You are not protected';
+  const statusDot = connected ? colors.green : connecting || guardActive ? colors.yellow : colors.red;
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: 20 }}>
@@ -96,17 +102,25 @@ export default function HomeScreen() {
           <StatTile label="PROTOCOL" value="WireGuard" />
         </View>
       )}
+      {connected && (
+        <View style={styles.statsGrid}>
+          <StatTile label="DOWNLOADED" value={fmtBytes(traffic.rxBytes)} />
+          <StatTile label="UPLOADED" value={fmtBytes(traffic.txBytes)} />
+        </View>
+      )}
 
-      <View style={styles.quickRow}>
-        <Pressable style={styles.quickChip} onPress={toggleKillSwitch}>
-          <FontAwesome6 name="power-off" size={12} color={colors.orange} />
-          <Text style={styles.quickLabel}>Kill Switch {killSwitch ? 'On' : 'Off'}</Text>
-        </Pressable>
-        <Pressable style={styles.quickChip} onPress={toggleAutoConnect}>
-          <FontAwesome6 name="wifi" size={12} color={colors.orange} />
-          <Text style={styles.quickLabel}>Auto-Connect {autoConnect ? 'On' : 'Off'}</Text>
-        </Pressable>
-      </View>
+      {vpn.available && (
+        <View style={styles.quickRow}>
+          <Pressable style={styles.quickChip} onPress={() => setKillSwitch(!killSwitch)}>
+            <FontAwesome6 name="power-off" size={12} color={colors.orange} />
+            <Text style={styles.quickLabel}>Kill Switch {killSwitch ? 'On' : 'Off'}</Text>
+          </Pressable>
+          <Pressable style={styles.quickChip} onPress={() => setBlockAds(!blockAds)}>
+            <FontAwesome6 name="ban" size={12} color={colors.orange} />
+            <Text style={styles.quickLabel}>Ad Block {blockAds ? 'On' : 'Off'}</Text>
+          </Pressable>
+        </View>
+      )}
     </ScrollView>
   );
 }

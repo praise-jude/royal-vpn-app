@@ -10,6 +10,7 @@ import DevicesScreen from '../screens/DevicesScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PlansScreen from '../screens/PlansScreen';
 import AuthScreen from '../screens/AuthScreen';
+import SplitTunnelScreen from '../screens/SplitTunnelScreen';
 import TabBar from './TabBar';
 import { colors, font, radii } from '../theme';
 import { useAuthStore } from '../store/useAuthStore';
@@ -41,13 +42,14 @@ export default function RootNavigator() {
   const restore = useAuthStore((s) => s.restore);
   const setUser = useAuthStore((s) => s.setUser);
   const loadServers = useVpnStore((s) => s.loadServers);
+  const initVpn = useVpnStore((s) => s.init);
   const [banner, setBanner] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => { void restore(); }, [restore]);
 
   useEffect(() => {
     if (status !== 'signedIn') return;
-    void loadServers();
+    void initVpn().then(() => loadServers());
     // Back from Korapay on the web: confirm the payment with the server.
     const reference = readReturnedPayment();
     if (reference) {
@@ -60,7 +62,7 @@ export default function RootNavigator() {
     }
     const id = setInterval(() => { void loadServers(); }, 60000);
     return () => clearInterval(id);
-  }, [status, loadServers, setUser]);
+  }, [status, loadServers, initVpn, setUser]);
 
   useEffect(() => {
     if (!banner) return;
@@ -84,6 +86,7 @@ export default function RootNavigator() {
             <>
               <Stack.Screen name="Tabs" component={Tabs} />
               <Stack.Screen name="Plans" component={PlansScreen} options={{ contentStyle: { backgroundColor: colors.bg, paddingTop: 58 } }} />
+              <Stack.Screen name="SplitTunnel" component={SplitTunnelScreen} options={{ contentStyle: { backgroundColor: colors.bg, paddingTop: 58 } }} />
             </>
           ) : (
             <Stack.Screen name="Auth" component={AuthScreen} />

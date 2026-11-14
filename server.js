@@ -1,47 +1,52 @@
-// Serves the exported web app (dist/) for Royalman Cloud hosting.
-// The platform sets PORT and HOST and checks GET /health.
-const http = require('http');
-const fs = require('fs');
+// Royal-VPN on Royalman Cloud: serves the web app (dist/) and the API (/api) from one process.
+// The platform sets PORT, HOST and DATABASE_URL, and checks GET /health.
 const path = require('path');
+const express = require('express');
+const { Pool } = require('pg');
+const { createApi } = require('./server/api');
 
-const root = path.join(__dirname, 'dist');
 const port = Number(process.env.PORT) || 3000;
 const host = process.env.HOST || '127.0.0.1';
+const root = path.join(__dirname, 'dist');
 
-const types = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
-  '.ico': 'image/x-icon', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml',
-  '.ttf': 'font/ttf', '.otf': 'font/otf', '.woff': 'font/woff', '.woff2': 'font/woff2',
-};
+const app = express();
+app.disable('x-powered-by');
+app.set('trust proxy', 'loopback'); // behind the platform's router; req.ip is the visitor's address
 
-function send(res, status, body, type, cache) {
-  res.writeHead(status, {
-    'Content-Type': type, 'Cache-Control': cache,
-    'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin',
+app.use((_req, res, next) => {
+  res.set({
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'X-Frame-Options': 'DENY',
   });
-  res.end(body);
+  next();
+});
+
+app.get('/health', (_req, res) => res.type('text').send('ok'));
+
+// A missing setting turns the API off but keeps the web app up.
+let api = null;
+try {
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
+  const db = new Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
+  db.on('error', (e) => console.error('database error:', e.message));
+  api = createApi({ db });
+} catch (e) {
+  console.warn(`API is off (${e.message}); only the web app is served.`);
 }
+app.use('/api', api || ((_req, res) => res.status(503).json({ error: 'The service is starting up. Try again shortly.' })));
 
-http.createServer((req, res) => {
-  let urlPath;
-  try { urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { return send(res, 400, 'Bad request', 'text/plain', 'no-store'); }
-  if (urlPath === '/health') return send(res, 200, 'ok', 'text/plain', 'no-store');
-  if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed', 'text/plain', 'no-store');
+// The build renames assets/node_modules to assets/vendor; keep the old URLs working.
+app.use('/assets/node_modules', express.static(path.join(root, 'assets', 'vendor'), { immutable: true, maxAge: '1y' }));
+app.use(['/_expo', '/assets'], (req, res, next) => {
+  express.static(path.join(root, req.baseUrl.slice(1)), { immutable: true, maxAge: '1y', fallthrough: false })(req, res, next);
+});
+app.use(express.static(root, { index: false, maxAge: '1h' }));
 
-  // The build renames assets/node_modules to assets/vendor; keep the old URLs working.
-  urlPath = urlPath.replace(/^\/assets\/node_modules\//, '/assets/vendor/');
-  const file = path.join(root, path.normalize(urlPath));
-  if (!file.startsWith(root)) return send(res, 403, 'Forbidden', 'text/plain', 'no-store');
+// Single-page app: every other GET gets index.html.
+app.get('*', (_req, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(root, 'index.html')));
 
-  fs.stat(file, (err, st) => {
-    const target = !err && st.isFile() ? file : path.join(root, 'index.html'); // single-page app fallback
-    fs.readFile(target, (e, data) => {
-      if (e) return send(res, 404, 'Not found', 'text/plain', 'no-store');
-      const ext = path.extname(target);
-      const hashed = target.split(path.sep).some((part) => part === '_expo' || part === 'assets');
-      send(res, 200, req.method === 'HEAD' ? undefined : data, types[ext] || 'application/octet-stream',
-        ext === '.html' ? 'no-cache' : hashed ? 'public, max-age=31536000, immutable' : 'public, max-age=3600');
-    });
-  });
-}).listen(port, host, () => console.log(`Royal-VPN web listening on http://${host}:${port}`));
+// eslint-disable-next-line no-unused-vars
+app.use((err, _req, res, _next) => res.status(err.status || 500).type('text').send(err.status === 404 ? 'Not found' : 'Error'));
+
+app.listen(port, host, () => console.log(`Royal-VPN listening on http://${host}:${port}`));

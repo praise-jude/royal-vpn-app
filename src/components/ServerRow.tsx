@@ -54,7 +54,9 @@ export default function ServerRow({
         </View>
         <Text style={styles.sub}>{detail(server)}</Text>
       </View>
-      {server.pingMs != null && <Text style={styles.ping}>{server.pingMs} ms</Text>}
+      {server.activeUsers != null && server.status === 'AVAILABLE' && (
+        <Text style={styles.ping}>{server.activeUsers} online</Text>
+      )}
       {server.live && (
         <Pressable hitSlop={8} onPress={onToggleFavorite} accessibilityLabel={favorite ? 'Remove from favourites' : 'Add to favourites'}>
           <FontAwesome6 name="star" solid={favorite} size={15} color={favorite ? colors.orange : 'rgba(255,255,255,0.35)'} />

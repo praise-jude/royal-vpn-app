@@ -38,6 +38,25 @@ export default function HomeScreen() {
   }, [connected]);
   const seconds = connectedAt ? Math.floor((Date.now() - connectedAt) / 1000) : 0;
 
+  // Real latency from this phone, through the tunnel: time a tiny request to Cloudflare every 10 s.
+  const [latency, setLatency] = useState<number | null>(null);
+  useEffect(() => {
+    if (!connected) return setLatency(null);
+    let alive = true;
+    const measure = async () => {
+      const started = Date.now();
+      try {
+        await fetch(`https://1.1.1.1/cdn-cgi/trace?t=${started}`, { cache: 'no-store' });
+        if (alive) setLatency(Date.now() - started);
+      } catch {
+        if (alive) setLatency(null);
+      }
+    };
+    void measure();
+    const id = setInterval(measure, 10000);
+    return () => { alive = false; clearInterval(id); };
+  }, [connected]);
+
   const btnBg = connecting ? '#4B5563' : connected ? colors.blue : colors.orange;
   const label = connecting ? 'Connecting…' : connected ? 'PROTECTED' : 'CONNECT';
   const statusLine = connecting ? 'Securing your connection…' : connected ? 'Your connection is protected' : guardActive ? 'Traffic blocked until you reconnect' : 'You are not protected';
@@ -98,7 +117,7 @@ export default function HomeScreen() {
       {connected && (
         <View style={styles.statsGrid}>
           <StatTile label="DURATION" value={fmtDuration(seconds)} />
-          <StatTile label="PING" value={server?.pingMs != null ? `${server.pingMs} ms` : '—'} />
+          <StatTile label="LATENCY" value={latency != null ? `${latency} ms` : '—'} />
           <StatTile label="PROTOCOL" value="WireGuard" />
         </View>
       )}

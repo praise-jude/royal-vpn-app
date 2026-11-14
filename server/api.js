@@ -188,13 +188,12 @@ function createApi({ db, env = process.env, fetchImpl = fetch, payments, dnsLook
 
   // ---------- servers ----------
   async function nodeStatus(srv) {
-    const started = Date.now();
     try {
       const r = await fetchImpl(`http://${srv.statusHost}:${srv.statusPort || 8081}/status`, {
         headers: { 'x-royal-status-key': srv.statusKey }, signal: AbortSignal.timeout(4000),
       });
       if (!r.ok) return null;
-      return { ...(await r.json()), pingMs: Date.now() - started };
+      return await r.json();
     } catch {
       return null;
     }
@@ -208,7 +207,9 @@ function createApi({ db, env = process.env, fetchImpl = fetch, payments, dnsLook
         return {
           id: srv.id, city: srv.city, country: srv.country, flag: srv.flag, vip: Boolean(srv.vip), live: true,
           status: s ? 'AVAILABLE' : 'OFFLINE',
-          pingMs: s ? s.pingMs : null, loadPct: s ? s.memUsedPct ?? null : null, activeUsers: s ? s.wgActivePeers ?? null : null,
+          // pingMs stays null: the API's round trip to a server says nothing about the customer's latency.
+          // The app measures real latency itself once connected. Kept for older app builds.
+          pingMs: null, loadPct: s ? s.memUsedPct ?? null : null, activeUsers: s ? s.wgActivePeers ?? null : null,
         };
       }));
       const taken = new Set(SERVERS.map((s) => s.id));

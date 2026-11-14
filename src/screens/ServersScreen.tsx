@@ -19,8 +19,10 @@ export default function ServersScreen() {
   const [query, setQuery] = useState('');
 
   const bestId = useMemo(() => {
-    const up = servers.filter((s) => s.status === 'AVAILABLE' && s.pingMs != null);
-    return up.sort((a, b) => (a.pingMs as number) - (b.pingMs as number))[0]?.id;
+    // Least-loaded live server; only worth a badge when there's a choice.
+    const up = servers.filter((s) => s.status === 'AVAILABLE' && s.loadPct != null);
+    if (up.length < 2) return undefined;
+    return up.sort((a, b) => (a.loadPct as number) - (b.loadPct as number))[0]?.id;
   }, [servers]);
 
   // Favourites first, then live servers, then coming soon; filtered by the search box.

@@ -38,7 +38,7 @@ type VpnState = Prefs & {
 
 function bestServer(servers: Server[]): Server | undefined {
   const up = servers.filter((s) => s.status === 'AVAILABLE');
-  return [...up].sort((a, b) => (a.pingMs ?? 9e9) - (b.pingMs ?? 9e9))[0] ?? servers.find((s) => s.live);
+  return [...up].sort((a, b) => (a.loadPct ?? 100) - (b.loadPct ?? 100))[0] ?? servers.find((s) => s.live);
 }
 
 const prefKeys = Object.keys(DEFAULT_PREFS) as (keyof Prefs)[];

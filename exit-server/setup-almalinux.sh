@@ -51,7 +51,10 @@ firewall-cmd --permanent --get-policies | tr ' ' '\n' | grep -qx royalvpn-out ||
 firewall-cmd -q --permanent --policy=royalvpn-out --add-ingress-zone=royalvpn 2>/dev/null || true
 firewall-cmd -q --permanent --policy=royalvpn-out --add-egress-zone="$EXT_ZONE" 2>/dev/null || true
 firewall-cmd -q --permanent --policy=royalvpn-out --set-target=ACCEPT
-firewall-cmd -q --permanent --policy=royalvpn-out --add-masquerade
+# firewalld 0.9 refuses masquerade in a policy whose ingress zone has interfaces, so NAT is a direct rule
+# limited to the VPN range leaving through the external interface.
+EXT_IF="$(ip -4 route show default | awk '{print $5; exit}')"
+firewall-cmd -q --permanent --direct --add-rule ipv4 nat POSTROUTING 0 -s "$SUBNET" -o "$EXT_IF" -j MASQUERADE 2>/dev/null || true
 firewall-cmd -q --permanent --policy=royalvpn-out --add-rich-rule='rule family="ipv4" port port="25" protocol="tcp" reject' 2>/dev/null || true
 firewall-cmd -q --reload
 

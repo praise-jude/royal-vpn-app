@@ -17,10 +17,13 @@ import re
 import subprocess
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
 
 IFACE = os.environ.get("WG_IFACE", "wg0")
 PORT = int(os.environ.get("AGENT_PORT", "8081"))
+# 127.0.0.1 when the Royal-VPN API runs on this same machine; 0.0.0.0 (firewalled) otherwise.
+BIND = os.environ.get("AGENT_BIND", "0.0.0.0")
 KEY = os.environ["STATUS_KEY"]
 SUBNET = ipaddress.ip_network(os.environ.get("WG_SUBNET", "10.66.0.0/16"))
 STATE = os.environ.get("STATE_FILE", "/var/lib/royal-vpn-agent/peers.json")
@@ -46,7 +49,8 @@ def save(peers):
 
 
 def wg(*args):
-    return subprocess.run(["wg", *args], check=True, capture_output=True, text=True).stdout
+    # Python 3.6 compatible (no capture_output/text).
+    return subprocess.run(["wg"] + list(args), check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True).stdout
 
 
 def apply_peer(public_key, address):
@@ -154,7 +158,11 @@ def main():
                 apply_peer(key, address)
             except subprocess.CalledProcessError:
                 pass
-    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+    ThreadingHTTPServer((BIND, PORT), Handler).serve_forever()
+
+
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):  # http.server's own version needs Python 3.7
+    daemon_threads = True
 
 
 if __name__ == "__main__":

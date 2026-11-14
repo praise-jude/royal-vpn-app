@@ -1,5 +1,24 @@
 {
   "enabledPlugins": {
     "expo@claude-plugins-official": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(railway deployment list)",
+      "Bash(railway deployment list *)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx tsc --noEmit *)",
+      "Bash(railway logs)",
+      "Bash(railway logs *)",
+      "Bash(vercel ls)",
+      "Bash(vercel ls *)",
+      "Bash(railway status)",
+      "Bash(railway status *)",
+      "Bash(vercel logs *)",
+      "Bash(npm run test:api)",
+      "Bash(railway whoami)",
+      "Bash(railway service status)",
+      "Bash(railway service status *)"
+    ]
   }
 }

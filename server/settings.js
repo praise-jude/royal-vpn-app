@@ -2,6 +2,7 @@
 // Order: an environment variable always wins; otherwise the app_settings row; otherwise a default.
 // JWT_SECRET is generated once on first start and stored here.
 const crypto = require('crypto');
+const fs = require('fs');
 
 const DEFAULTS = {
   PLAN_PRO_NGN: '6000',
@@ -24,7 +25,19 @@ async function loadSettings(db, env = process.env) {
   const stored = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   const out = { ...env };
   for (const k of KEYS) if (!env[k]) out[k] = stored[k] ?? DEFAULTS[k];
+  // Exit servers can also come from a root-managed file on the host (set up by exit-server/setup-almalinux.sh).
+  if (!out.REAL_SERVERS) out.REAL_SERVERS = readServersFile(env.REAL_SERVERS_FILE || '/etc/royal-vpn/servers.json');
   return out;
+}
+
+function readServersFile(file) {
+  try {
+    const raw = fs.readFileSync(file, 'utf8');
+    JSON.parse(raw); // ignore a half-written or broken file
+    return raw;
+  } catch {
+    return undefined;
+  }
 }
 
 module.exports = { loadSettings, KEYS };

@@ -29,7 +29,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "build:web": "expo export --platform web && node scripts/fix-web-assets.js",
-    "deploy": "vercel deploy --prod --scope inventra-app"
+    "deploy": "vercel deploy --prod --scope inventra-app",
+    "build": "npm run build:web",
+    "serve": "node server.js"
   },
   "private": true
 }

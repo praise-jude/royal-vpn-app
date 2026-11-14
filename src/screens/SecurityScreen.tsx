@@ -1,27 +1,32 @@
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { colors, font, radii } from '../theme';
-import { useVpnStore } from '../store/useVpnStore';
+import { useVpnStore, useSelectedServer } from '../store/useVpnStore';
+import { vpn } from '../lib/vpn';
 import ToggleSwitch from '../components/ToggleSwitch';
 
 export default function SecurityScreen() {
   const killSwitch = useVpnStore((s) => s.killSwitch);
   const autoConnect = useVpnStore((s) => s.autoConnect);
-  const twoFA = useVpnStore((s) => s.twoFA);
   const toggleKillSwitch = useVpnStore((s) => s.toggleKillSwitch);
   const toggleAutoConnect = useVpnStore((s) => s.toggleAutoConnect);
-  const toggle2FA = useVpnStore((s) => s.toggle2FA);
+  const connected = useVpnStore((s) => s.status === 'connected');
+  const server = useSelectedServer();
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: 20 }}>
       <Text style={styles.title}>Security Center</Text>
       <Text style={styles.subtitle}>Your protection status at a glance</Text>
 
-      <View style={styles.dnsCard}>
-        <FontAwesome6 name="circle-check" size={20} color={colors.green} />
-        <View>
-          <Text style={styles.dnsTitle}>DNS Leak Protection</Text>
-          <Text style={styles.dnsSub}>IPv4 protected · IPv6 protected · No leak detected</Text>
+      <View style={[styles.dnsCard, !connected && styles.offCard]}>
+        <FontAwesome6 name={connected ? 'circle-check' : 'circle-exclamation'} size={20} color={connected ? colors.green : colors.yellow} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.dnsTitle}>{connected ? 'You are protected' : 'Not protected'}</Text>
+          <Text style={styles.dnsSub}>
+            {connected
+              ? `Traffic encrypted with WireGuard via ${server?.city ?? 'Royal-VPN'}`
+              : vpn.available ? 'Connect from the Home tab to encrypt your traffic' : vpn.unavailableReason}
+          </Text>
         </View>
       </View>
 
@@ -39,22 +44,9 @@ export default function SecurityScreen() {
         value={autoConnect}
         onToggle={toggleAutoConnect}
       />
-      <SettingToggle
-        icon="lock"
-        title="Two-Factor Authentication"
-        sub="Extra layer on account login"
-        value={twoFA}
-        onToggle={toggle2FA}
-      />
-
-      <Pressable style={styles.trustedRow}>
-        <FontAwesome6 name="route" size={16} color={colors.orange} style={{ width: 20 }} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.dnsTitle}>Trusted Networks</Text>
-          <Text style={styles.trustedSub}>2 networks configured</Text>
-        </View>
-        <FontAwesome6 name="chevron-right" size={13} color={colors.textFaint} />
-      </Pressable>
+      {!vpn.available && (
+        <Text style={styles.trustedSub}>Kill Switch and Auto-Connect take effect in the Royal-VPN Android app.</Text>
+      )}
     </ScrollView>
   );
 }
@@ -101,6 +93,7 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 18,
   },
+  offCard: { backgroundColor: 'rgba(234,179,8,0.1)', borderColor: 'rgba(234,179,8,0.3)' },
   dnsTitle: { fontFamily: font.bold, fontSize: 14, color: colors.textPrimary },
   dnsSub: { fontFamily: font.regular, fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   toggleRow: {

@@ -1,69 +1,112 @@
 import { create } from 'zustand';
-import { SERVERS, DEVICES } from '../data/servers';
+import { api, ApiError, type Server } from '../lib/api';
+import { vpn, deviceName, platformName } from '../lib/vpn';
+
+type Status = 'disconnected' | 'connecting' | 'connected';
 
 type VpnState = {
-  connected: boolean;
-  connecting: boolean;
-  seconds: number;
-  serverId: string;
+  servers: Server[];
+  serversLoading: boolean;
+  serversError: string | null;
+  serverId: string | null;
+  favorites: Record<string, boolean>;
+
+  status: Status;
+  connectedAt: number | null;
+  error: string | null;
+  needsUpgrade: boolean;
+
   killSwitch: boolean;
   autoConnect: boolean;
-  twoFA: boolean;
-  favorites: Record<string, boolean>;
-  signedOutDevices: Record<number, boolean>;
 
-  toggleConnect: () => void;
-  tick: () => void;
+  loadServers: () => Promise<void>;
   selectServer: (id: string) => void;
   toggleFavorite: (id: string) => void;
+  toggleConnect: () => Promise<void>;
+  clearError: () => void;
   toggleKillSwitch: () => void;
   toggleAutoConnect: () => void;
-  toggle2FA: () => void;
-  signOutDevice: (id: number) => void;
+  reset: () => void;
 };
 
-export const useVpnStore = create<VpnState>((set, get) => ({
-  connected: true,
-  connecting: false,
-  seconds: 2538,
-  serverId: 'lagos',
-  killSwitch: true,
-  autoConnect: true,
-  twoFA: false,
-  favorites: { london: true },
-  signedOutDevices: {},
+// Pick the live server with the lowest ping, falling back to the first live one.
+function bestServer(servers: Server[]): Server | undefined {
+  const up = servers.filter((s) => s.status === 'AVAILABLE');
+  return [...up].sort((a, b) => (a.pingMs ?? 9e9) - (b.pingMs ?? 9e9))[0] ?? servers.find((s) => s.live);
+}
 
-  toggleConnect: () => {
-    const { connecting, connected } = get();
-    if (connecting) return;
-    if (connected) {
-      set({ connected: false, seconds: 0 });
-    } else {
-      set({ connecting: true });
-      setTimeout(() => set({ connecting: false, connected: true }), 1400);
+export const useVpnStore = create<VpnState>((set, get) => ({
+  servers: [],
+  serversLoading: false,
+  serversError: null,
+  serverId: null,
+  favorites: {},
+
+  status: 'disconnected',
+  connectedAt: null,
+  error: null,
+  needsUpgrade: false,
+
+  killSwitch: false,
+  autoConnect: false,
+
+  loadServers: async () => {
+    set({ serversLoading: true, serversError: null });
+    try {
+      const { servers } = await api<{ servers: Server[] }>('/servers', { auth: false });
+      const current = get().serverId;
+      const keep = current && servers.some((s) => s.id === current && s.live);
+      set({ servers, serversLoading: false, serverId: keep ? current : bestServer(servers)?.id ?? null });
+    } catch (e: any) {
+      set({ serversLoading: false, serversError: e?.message || 'Could not load servers.' });
     }
   },
-  tick: () => {
-    if (get().connected) set((s) => ({ seconds: s.seconds + 1 }));
+
+  selectServer: (id) => {
+    const s = get().servers.find((x) => x.id === id);
+    if (!s || !s.live) return;
+    set({ serverId: id, error: null, needsUpgrade: false });
   },
-  selectServer: (id) => set({ serverId: id }),
-  toggleFavorite: (id) =>
-    set((s) => ({ favorites: { ...s.favorites, [id]: !s.favorites[id] } })),
+
+  toggleFavorite: (id) => set((s) => ({ favorites: { ...s.favorites, [id]: !s.favorites[id] } })),
+
+  toggleConnect: async () => {
+    const { status, serverId } = get();
+    if (status === 'connecting') return;
+    if (status === 'connected') {
+      await vpn.stop();
+      return set({ status: 'disconnected', connectedAt: null });
+    }
+    if (!vpn.available) return set({ error: vpn.unavailableReason, needsUpgrade: false });
+    if (!serverId) return set({ error: 'No server is available right now. Please try again shortly.' });
+
+    set({ status: 'connecting', error: null, needsUpgrade: false });
+    try {
+      if (!(await vpn.requestPermission())) throw new ApiError('Allow Royal-VPN to set up a VPN connection to continue.', 0);
+      const publicKey = await vpn.getPublicKey();
+      const cfg = await api<{ endpoint: string; serverPublicKey: string; clientAddress: string; dns: string }>('/vpn/server-config', {
+        method: 'POST',
+        body: { publicKey, serverId, deviceName: deviceName(), platform: platformName() },
+      });
+      if (!(await vpn.start(cfg))) throw new ApiError('The secure connection could not start. Please try again.', 0);
+      set({ status: 'connected', connectedAt: Date.now() });
+    } catch (e: any) {
+      set({ status: 'disconnected', connectedAt: null, error: e?.message || 'Could not connect.', needsUpgrade: Boolean(e?.upgrade) });
+    }
+  },
+
+  clearError: () => set({ error: null, needsUpgrade: false }),
   toggleKillSwitch: () => set((s) => ({ killSwitch: !s.killSwitch })),
   toggleAutoConnect: () => set((s) => ({ autoConnect: !s.autoConnect })),
-  toggle2FA: () => set((s) => ({ twoFA: !s.twoFA })),
-  signOutDevice: (id) =>
-    set((s) => ({ signedOutDevices: { ...s.signedOutDevices, [id]: true } })),
+
+  reset: () => {
+    void vpn.stop();
+    set({ status: 'disconnected', connectedAt: null, error: null, needsUpgrade: false });
+  },
 }));
 
 export function useSelectedServer() {
-  const serverId = useVpnStore((s) => s.serverId);
-  return SERVERS.find((s) => s.id === serverId) ?? SERVERS[0];
-}
-
-export function useVisibleDevices() {
-  const signedOut = useVpnStore((s) => s.signedOutDevices);
-  return DEVICES.filter((d) => !signedOut[d.id]);
+  return useVpnStore((s) => s.servers.find((x) => x.id === s.serverId) ?? null);
 }
 
 export function fmtDuration(totalSeconds: number) {

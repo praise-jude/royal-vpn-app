@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { colors, font, radii } from '../theme';
@@ -7,33 +7,38 @@ import { useVpnStore, useSelectedServer, fmtDuration } from '../store/useVpnStor
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
-  const connected = useVpnStore((s) => s.connected);
-  const connecting = useVpnStore((s) => s.connecting);
-  const seconds = useVpnStore((s) => s.seconds);
+  const status = useVpnStore((s) => s.status);
+  const connectedAt = useVpnStore((s) => s.connectedAt);
+  const error = useVpnStore((s) => s.error);
+  const needsUpgrade = useVpnStore((s) => s.needsUpgrade);
   const killSwitch = useVpnStore((s) => s.killSwitch);
   const autoConnect = useVpnStore((s) => s.autoConnect);
+  const serversLoading = useVpnStore((s) => s.serversLoading);
   const toggleConnect = useVpnStore((s) => s.toggleConnect);
+  const clearError = useVpnStore((s) => s.clearError);
   const toggleKillSwitch = useVpnStore((s) => s.toggleKillSwitch);
   const toggleAutoConnect = useVpnStore((s) => s.toggleAutoConnect);
-  const tick = useVpnStore((s) => s.tick);
   const server = useSelectedServer();
 
+  const connected = status === 'connected';
+  const connecting = status === 'connecting';
+
+  // Re-render every second while connected so the timer moves.
+  const [, setNow] = useState(0);
   useEffect(() => {
-    const id = setInterval(tick, 1000);
+    if (!connected) return;
+    const id = setInterval(() => setNow((n) => n + 1), 1000);
     return () => clearInterval(id);
-  }, [tick]);
+  }, [connected]);
+  const seconds = connectedAt ? Math.floor((Date.now() - connectedAt) / 1000) : 0;
 
   const btnBg = connecting ? '#4B5563' : connected ? colors.blue : colors.orange;
   const label = connecting ? 'Connecting…' : connected ? 'PROTECTED' : 'CONNECT';
-  const statusLine = connecting
-    ? 'Securing your connection…'
-    : connected
-    ? 'Your connection is protected'
-    : 'You are not protected';
+  const statusLine = connecting ? 'Securing your connection…' : connected ? 'Your connection is protected' : 'You are not protected';
   const statusDot = connected ? colors.green : connecting ? colors.yellow : colors.red;
 
   return (
-    <View style={styles.screen}>
+    <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: 20 }}>
       <View style={styles.header}>
         <FontAwesome6 name="shield-halved" size={20} color={colors.orange} />
         <Text style={styles.title}>ROYAL-VPN</Text>
@@ -42,6 +47,9 @@ export default function HomeScreen() {
       <View style={styles.connectWrap}>
         <Pressable
           onPress={toggleConnect}
+          disabled={connecting}
+          accessibilityRole="button"
+          accessibilityLabel={connected ? 'Disconnect' : 'Connect'}
           style={[styles.connectBtn, { backgroundColor: btnBg }]}
         >
           <FontAwesome6 name="power-off" size={38} color="#fff" />
@@ -53,11 +61,28 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      {error && (
+        <View style={styles.errorBox}>
+          <FontAwesome6 name="circle-info" size={14} color={colors.orange} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.errorText}>{error}</Text>
+            {needsUpgrade && (
+              <Pressable onPress={() => { clearError(); navigation.navigate('Plans'); }}>
+                <Text style={styles.errorLink}>See plans</Text>
+              </Pressable>
+            )}
+          </View>
+          <Pressable onPress={clearError} hitSlop={10} accessibilityLabel="Dismiss">
+            <FontAwesome6 name="xmark" size={13} color={colors.textMuted} />
+          </Pressable>
+        </View>
+      )}
+
       <Pressable style={styles.serverRow} onPress={() => navigation.navigate('Servers')}>
-        <FontAwesome6 name="globe" size={19} color={colors.orange} style={{ width: 22 }} />
+        {server ? <Text style={styles.flag}>{server.flag}</Text> : <FontAwesome6 name="globe" size={19} color={colors.orange} style={{ width: 22 }} />}
         <View style={{ flex: 1 }}>
           <Text style={styles.serverCity}>
-            {server.city}, {server.country}
+            {server ? `${server.city}, ${server.country}` : serversLoading ? 'Finding the best server…' : 'No server available'}
           </Text>
           <Text style={styles.serverHint}>Tap to change server</Text>
         </View>
@@ -67,7 +92,7 @@ export default function HomeScreen() {
       {connected && (
         <View style={styles.statsGrid}>
           <StatTile label="DURATION" value={fmtDuration(seconds)} />
-          <StatTile label="PING" value={`${server.ping} ms`} />
+          <StatTile label="PING" value={server?.pingMs != null ? `${server.pingMs} ms` : '—'} />
           <StatTile label="PROTOCOL" value="WireGuard" />
         </View>
       )}
@@ -75,18 +100,14 @@ export default function HomeScreen() {
       <View style={styles.quickRow}>
         <Pressable style={styles.quickChip} onPress={toggleKillSwitch}>
           <FontAwesome6 name="power-off" size={12} color={colors.orange} />
-          <Text style={styles.quickLabel}>
-            Kill Switch {killSwitch ? 'On' : 'Off'}
-          </Text>
+          <Text style={styles.quickLabel}>Kill Switch {killSwitch ? 'On' : 'Off'}</Text>
         </Pressable>
         <Pressable style={styles.quickChip} onPress={toggleAutoConnect}>
           <FontAwesome6 name="wifi" size={12} color={colors.orange} />
-          <Text style={styles.quickLabel}>
-            Auto-Connect {autoConnect ? 'On' : 'Off'}
-          </Text>
+          <Text style={styles.quickLabel}>Auto-Connect {autoConnect ? 'On' : 'Off'}</Text>
         </Pressable>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -105,54 +126,25 @@ const styles = StyleSheet.create({
   title: { fontFamily: font.extraBold, fontSize: 19, color: colors.textPrimary, letterSpacing: 0.5 },
   connectWrap: { alignItems: 'center', marginVertical: 8, marginBottom: 30 },
   connectBtn: {
-    width: 196,
-    height: 196,
-    borderRadius: 9999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.55,
-    shadowRadius: 30,
-    shadowOffset: { width: 0, height: 20 },
-    elevation: 10,
+    width: 196, height: 196, borderRadius: 9999, alignItems: 'center', justifyContent: 'center', gap: 10,
+    shadowColor: '#000', shadowOpacity: 0.55, shadowRadius: 30, shadowOffset: { width: 0, height: 20 }, elevation: 10,
   },
   connectLabel: { fontFamily: font.bold, fontSize: 14, color: '#fff', letterSpacing: 1 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18 },
   statusDot: { width: 8, height: 8, borderRadius: 9999 },
   statusText: { fontFamily: font.regular, fontSize: 13, color: colors.textSecondary },
-  serverRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.surface,
-    borderRadius: radii.xl,
-    padding: 16,
-    marginBottom: 14,
-  },
+  errorBox: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', backgroundColor: 'rgba(255,147,0,0.1)', borderRadius: radii.md, padding: 12, marginBottom: 14 },
+  errorText: { fontFamily: font.regular, fontSize: 13, color: colors.textPrimary },
+  errorLink: { fontFamily: font.semiBold, fontSize: 13, color: colors.orange, marginTop: 6 },
+  serverRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.surface, borderRadius: radii.xl, padding: 16, marginBottom: 14 },
+  flag: { fontSize: 22 },
   serverCity: { fontFamily: font.semiBold, fontSize: 15, color: colors.textPrimary },
   serverHint: { fontFamily: font.regular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   statsGrid: { flexDirection: 'row', gap: 10, marginBottom: 14 },
-  statTile: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    paddingVertical: 14,
-    paddingHorizontal: 6,
-    alignItems: 'center',
-  },
+  statTile: { flex: 1, backgroundColor: colors.surface, borderRadius: radii.lg, paddingVertical: 14, paddingHorizontal: 6, alignItems: 'center' },
   statLabel: { fontFamily: font.regular, fontSize: 10, color: colors.textMuted, letterSpacing: 0.5, marginBottom: 4 },
   statValue: { fontFamily: font.bold, fontSize: 14, color: colors.textPrimary },
   quickRow: { flexDirection: 'row', gap: 10 },
-  quickChip: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
+  quickChip: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.surface, borderRadius: radii.md, paddingVertical: 10, paddingHorizontal: 12 },
   quickLabel: { fontFamily: font.semiBold, fontSize: 12, color: colors.textPrimary },
 });

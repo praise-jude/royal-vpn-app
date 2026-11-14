@@ -3,7 +3,9 @@
 const path = require('path');
 const express = require('express');
 const { Pool } = require('pg');
+const crypto = require('crypto');
 const { createApi } = require('./server/api');
+const { loadSettings, KEYS } = require('./server/settings');
 
 const port = Number(process.env.PORT) || 3000;
 const host = process.env.HOST || '127.0.0.1';
@@ -24,17 +26,34 @@ app.use((_req, res, next) => {
 
 app.get('/health', (_req, res) => res.type('text').send('ok'));
 
-// A missing setting turns the API off but keeps the web app up.
+// The API comes up once settings load from the database (server/settings.js); until then, and if the
+// database is unreachable, /api answers 503 and the web app keeps working. Settings are re-read every
+// minute, so a setting added in the database takes effect without a restart.
 let api = null;
-try {
-  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
-  const db = new Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
-  db.on('error', (e) => console.error('database error:', e.message));
-  api = createApi({ db });
-} catch (e) {
-  console.warn(`API is off (${e.message}); only the web app is served.`);
+let apiKey = '';
+const db = process.env.DATABASE_URL ? new Pool({ connectionString: process.env.DATABASE_URL, max: 10 }) : null;
+if (db) db.on('error', (e) => console.error('database error:', e.message));
+else console.warn('DATABASE_URL is not set: the API is off, only the web app is served.');
+
+async function refreshApi() {
+  if (!db) return;
+  try {
+    const env = await loadSettings(db);
+    const key = crypto.createHash('sha256').update(JSON.stringify(KEYS.map((k) => env[k] ?? null))).digest('hex');
+    if (key === apiKey) return;
+    api = createApi({ db, env });
+    apiKey = key;
+    let exits = 0;
+    try { exits = JSON.parse(env.REAL_SERVERS || '[]').length; } catch { /* reported by the API */ }
+    console.log(`API ready (${exits} exit servers, payments ${env.KORAPAY_SECRET_KEY ? 'on' : 'off'})`);
+  } catch (e) {
+    console.error(`API not ready: ${e.message}`);
+  }
 }
-app.use('/api', api || ((_req, res) => res.status(503).json({ error: 'The service is starting up. Try again shortly.' })));
+refreshApi();
+setInterval(refreshApi, 60000).unref();
+
+app.use('/api', (req, res, next) => (api ? api(req, res, next) : res.status(503).json({ error: 'The service is starting up. Try again shortly.' })));
 
 // The build renames assets/node_modules to assets/vendor; keep the old URLs working.
 app.use('/assets/node_modules', express.static(path.join(root, 'assets', 'vendor'), { immutable: true, maxAge: '1y' }));

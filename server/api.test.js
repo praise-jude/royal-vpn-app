@@ -166,6 +166,22 @@ test('leak test: reports the visitor IP and whether it is a Royal-VPN exit', asy
   } finally { t.close(); }
 });
 
+test('settings: JWT secret is generated once and kept; env and stored values win over defaults', async () => {
+  const { loadSettings } = require('./settings');
+  const { PGlite } = await import('@electric-sql/pglite');
+  const db = new PGlite();
+  const a = await loadSettings(db, {});
+  assert.ok(a.JWT_SECRET.length >= 64);
+  assert.equal(a.PLAN_PRO_NGN, '6000');
+  assert.equal(a.KORAPAY_SECRET_KEY, undefined);
+  await db.query("INSERT INTO app_settings (key, value) VALUES ('REAL_SERVERS', '[1]'), ('PLAN_PRO_NGN', '7000')");
+  const b = await loadSettings(db, { PLAN_VIP_NGN: '25000' });
+  assert.equal(b.JWT_SECRET, a.JWT_SECRET, 'secret must survive restarts');
+  assert.equal(b.REAL_SERVERS, '[1]');
+  assert.equal(b.PLAN_PRO_NGN, '7000');
+  assert.equal(b.PLAN_VIP_NGN, '25000');
+});
+
 test('grandfathered email is VIP; payments off returns 503', async () => {
   const t = await setup({ withPayments: false });
   try {

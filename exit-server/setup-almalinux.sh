@@ -43,11 +43,11 @@ CONF
 fi
 
 echo "== firewall"
-firewall-cmd -q --permanent --get-zones | tr ' ' '\n' | grep -qx royalvpn || firewall-cmd -q --permanent --new-zone=royalvpn
+firewall-cmd --permanent --get-zones | tr ' ' '\n' | grep -qx royalvpn || firewall-cmd -q --permanent --new-zone=royalvpn
 firewall-cmd -q --permanent --zone=royalvpn --set-target=DROP
 firewall-cmd -q --permanent --zone=royalvpn --add-interface=wg0 2>/dev/null || true
 firewall-cmd -q --permanent --zone="$EXT_ZONE" --add-port="${WG_PORT}/udp"
-firewall-cmd -q --permanent --get-policies | tr ' ' '\n' | grep -qx royalvpn-out || firewall-cmd -q --permanent --new-policy=royalvpn-out
+firewall-cmd --permanent --get-policies | tr ' ' '\n' | grep -qx royalvpn-out || firewall-cmd -q --permanent --new-policy=royalvpn-out
 firewall-cmd -q --permanent --policy=royalvpn-out --add-ingress-zone=royalvpn 2>/dev/null || true
 firewall-cmd -q --permanent --policy=royalvpn-out --add-egress-zone="$EXT_ZONE" 2>/dev/null || true
 firewall-cmd -q --permanent --policy=royalvpn-out --set-target=ACCEPT

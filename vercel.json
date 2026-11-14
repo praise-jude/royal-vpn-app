@@ -1,0 +1,8 @@
+{
+  "buildCommand": "npm run build:web",
+  "outputDirectory": "dist",
+  "framework": null,
+  "rewrites": [
+    { "source": "/assets/node_modules/:path*", "destination": "/assets/vendor/:path*" }
+  ]
+}

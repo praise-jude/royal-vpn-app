@@ -10,6 +10,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useVpnStore } from '../store/useVpnStore';
 
 const SUPPORT_EMAIL = 'info@royalmancloud.com';
+const PRIVACY_URL = 'https://royalmancloud.com/legal/royal-vpn-privacy';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -21,6 +22,7 @@ export default function SettingsScreen() {
   const signOut = useAuthStore((s) => s.signOut);
   const resetVpn = useVpnStore((s) => s.reset);
   const [changing, setChanging] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   if (!user) return null;
   const paid = user.planId !== 'free';
@@ -56,17 +58,50 @@ export default function SettingsScreen() {
 
       <View style={styles.list}>
         <SettingsRow icon="key" label="Change password" onPress={() => setChanging((v) => !v)} />
-        <SettingsRow icon="headset" label="Royal Support" detail={SUPPORT_EMAIL} onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Royal-VPN%20support`)} last />
+        <SettingsRow icon="headset" label="Royal Support" detail={SUPPORT_EMAIL} onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Royal-VPN%20support`)} />
+        <SettingsRow icon="shield-halved" label="Privacy policy" detail="No activity logs" onPress={() => Linking.openURL(PRIVACY_URL)} />
+        <SettingsRow icon="trash-can" label="Delete account" onPress={() => setDeleting((v) => !v)} last />
       </View>
 
       {changing && <ChangePassword onDone={() => setChanging(false)} />}
+      {deleting && <DeleteAccount onDeleted={() => { resetVpn(); void signOut(); }} />}
 
       <Pressable style={styles.logoutBtn} onPress={() => { resetVpn(); void signOut(); }}>
         <Text style={styles.logoutText}>Log Out</Text>
       </Pressable>
 
-      <Text style={styles.version}>Royal-VPN v1.0.0</Text>
+      <Text style={styles.version}>Royal-VPN v1.1.0</Text>
     </ScrollView>
+  );
+}
+
+function DeleteAccount({ onDeleted }: { onDeleted: () => void }) {
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function remove() {
+    if (!password) return setMsg('Enter your password to confirm.');
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api('/auth/delete-account', { method: 'POST', body: { password } });
+      onDeleted();
+    } catch (e: any) {
+      setMsg(e?.message || 'Could not delete your account.');
+      setBusy(false);
+    }
+  }
+
+  return (
+    <View style={styles.pwCard}>
+      <Text style={styles.pwMsg}>This permanently deletes your Royal-VPN account, your devices and your payment history, and disconnects all your devices. Any time left on a paid plan is lost. This can't be undone.</Text>
+      <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder="Your password" placeholderTextColor={colors.textFaint} secureTextEntry autoComplete="current-password" onSubmitEditing={remove} />
+      {msg && <Text style={[styles.pwMsg, { color: '#FCA5A5' }]}>{msg}</Text>}
+      <Pressable style={[styles.saveBtn, { backgroundColor: '#DC2626' }, busy && { opacity: 0.7 }]} onPress={remove} disabled={busy}>
+        {busy ? <ActivityIndicator color="#fff" /> : <Text style={[styles.saveText, { color: '#fff' }]}>Delete my account</Text>}
+      </Pressable>
+    </View>
   );
 }
 

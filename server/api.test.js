@@ -194,3 +194,16 @@ test('grandfathered email is VIP; payments off returns 503', async () => {
     assert.equal((await t.call('POST', '/payments/initialize', { planId: 'pro' }, u)).status, 503);
   } finally { t.close(); }
 });
+
+test('delete account: needs the password, removes devices from the servers, erases the account', async () => {
+  const t = await setup();
+  try {
+    const { token } = (await t.call('POST', '/auth/signup', { email: 'gone@example.com', password: 'password123' })).body;
+    assert.equal((await t.call('POST', '/vpn/server-config', { publicKey: KEY('dev1'), serverId: 'nyc' }, token)).status, 200);
+    assert.equal((await t.call('POST', '/auth/delete-account', { password: 'wrong-password' }, token)).status, 401);
+    assert.equal((await t.call('POST', '/auth/delete-account', { password: 'password123' }, token)).status, 200);
+    assert.ok(t.peers.some(([m, k]) => m === 'DELETE' && k === KEY('dev1')), 'device removed from the exit servers');
+    assert.equal((await t.call('POST', '/auth/login', { email: 'gone@example.com', password: 'password123' })).status, 401);
+    assert.equal((await t.db.query("SELECT count(*)::int AS n FROM devices")).rows[0].n, 0);
+  } finally { t.close(); }
+});

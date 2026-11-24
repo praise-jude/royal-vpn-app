@@ -319,13 +319,8 @@ function createApi({ db, env = process.env, fetchImpl = fetch, payments, dnsLook
   });
 
   // Revoke: the device stops counting against the plan at once, and each exit server is asked to drop the peer.
-  api.delete('/devices/:id', requireAuth, async (req, res) => {
-    const { rows } = await db.query(
-      'UPDATE devices SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL RETURNING wg_public_key',
-      [Number(req.params.id) || 0, req.user.id]
-    );
-    if (!rows[0]) return res.status(404).json({ error: 'Device not found.' });
-    const publicKey = rows[0].wg_public_key;
+  // Removes a device's WireGuard key from every exit server; returns how many servers confirmed.
+  async function removePeer(publicKey) {
     const results = await Promise.all(SERVERS.map(async (srv) => {
       try {
         const r = await fetchImpl(`http://${srv.statusHost}:${srv.statusPort || 8081}/peer`, {
@@ -335,7 +330,27 @@ function createApi({ db, env = process.env, fetchImpl = fetch, payments, dnsLook
         return r.ok;
       } catch { return false; }
     }));
-    res.json({ ok: true, removedFromServers: results.filter(Boolean).length, servers: SERVERS.length });
+    return results.filter(Boolean).length;
+  }
+
+  api.delete('/devices/:id', requireAuth, async (req, res) => {
+    const { rows } = await db.query(
+      'UPDATE devices SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL RETURNING wg_public_key',
+      [Number(req.params.id) || 0, req.user.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Device not found.' });
+    res.json({ ok: true, removedFromServers: await removePeer(rows[0].wg_public_key), servers: SERVERS.length });
+  });
+
+  // Account deletion (Google Play requires it in the app): password-confirmed; every device is cut off the
+  // exit servers, then the account, its devices and its payment rows are erased.
+  api.post('/auth/delete-account', requireAuth, authLimit, async (req, res) => {
+    const { rows } = await db.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
+    if (!rows[0] || !(await bcrypt.compare(String(req.body?.password || ''), rows[0].password_hash))) return res.status(401).json({ error: 'Your password is incorrect.' });
+    const { rows: devs } = await db.query('SELECT wg_public_key FROM devices WHERE user_id = $1 AND revoked_at IS NULL', [req.user.id]);
+    for (const d of devs) await removePeer(d.wg_public_key);
+    await db.query('DELETE FROM users WHERE id = $1', [req.user.id]);
+    res.json({ ok: true });
   });
 
   // ---------- plans + Korapay ----------

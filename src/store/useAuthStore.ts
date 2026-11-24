@@ -6,7 +6,7 @@ type AuthState = {
   user: User | null;
   restore: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, refCode?: string) => Promise<void>;
   refresh: () => Promise<void>;
   setUser: (user: User) => void;
   signOut: () => Promise<void>;
@@ -34,8 +34,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ status: 'signedIn', user: r.user });
   },
 
-  signUp: async (email, password) => {
-    const r = await api<{ token: string; user: User }>('/auth/signup', { method: 'POST', body: { email, password }, auth: false });
+  signUp: async (email, password, refCode) => {
+    const r = await api<{ token: string; user: User }>('/auth/signup', { method: 'POST', body: { email, password, refCode: refCode || undefined }, auth: false });
     await tokenStore.set(r.token);
     set({ status: 'signedIn', user: r.user });
   },

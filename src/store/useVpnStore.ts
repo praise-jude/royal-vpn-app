@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { api, ApiError, type Server } from '../lib/api';
 import { vpn, deviceName, platformName, DEFAULT_BLOCKING_DNS } from '../lib/vpn';
 import { loadPrefs, savePrefs, DEFAULT_PREFS, type Prefs } from '../lib/prefs';
+import { useAuthStore } from './useAuthStore';
 
 type Status = 'disconnected' | 'connecting' | 'connected';
 
@@ -136,7 +137,8 @@ export const useVpnStore = create<VpnState>((set, get) => {
           method: 'POST',
           body: { publicKey, serverId, deviceName: deviceName(), platform: platformName() },
         });
-        const dns = blockAds ? cfg.blockingDns || DEFAULT_BLOCKING_DNS : cfg.dns;
+        const paid = (useAuthStore.getState().user?.planId ?? 'free') !== 'free';
+        const dns = blockAds && paid ? cfg.blockingDns || DEFAULT_BLOCKING_DNS : cfg.dns;
         if (!(await vpn.start({ ...cfg, dns }, excludedApps))) throw new ApiError('The secure connection could not start. Please try again.', 0);
         set({ status: 'connected', connectedAt: Date.now(), connectedServerId: serverId, guardActive: false });
       } catch (e: any) {

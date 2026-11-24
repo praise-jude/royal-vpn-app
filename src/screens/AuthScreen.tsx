@@ -4,10 +4,17 @@ import { FontAwesome6 } from '@expo/vector-icons';
 import { colors, font, radii } from '../theme';
 import { useAuthStore } from '../store/useAuthStore';
 
+// Web: an invite link (vpn.royalmancloud.com/?ref=CODE) opens sign-up with the code filled in.
+function refFromUrl(): string {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return '';
+  try { return new URLSearchParams(window.location.search).get('ref')?.toUpperCase().slice(0, 12) || ''; } catch { return ''; }
+}
+
 export default function AuthScreen() {
   const signIn = useAuthStore((s) => s.signIn);
   const signUp = useAuthStore((s) => s.signUp);
-  const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
+  const [refCode, setRefCode] = useState(refFromUrl);
+  const [mode, setMode] = useState<'signIn' | 'signUp'>(refCode ? 'signUp' : 'signIn');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -23,7 +30,7 @@ export default function AuthScreen() {
     if (isSignUp && password.length < 8) return setError('Use a password of at least 8 characters.');
     setBusy(true);
     try {
-      await (isSignUp ? signUp : signIn)(email.trim(), password);
+      await (isSignUp ? signUp(email.trim(), password, refCode.trim()) : signIn(email.trim(), password));
     } catch (e: any) {
       setError(e?.message || 'Something went wrong. Please try again.');
       setBusy(false);
@@ -38,7 +45,7 @@ export default function AuthScreen() {
             <FontAwesome6 name="shield-halved" size={30} color={colors.orange} />
           </View>
           <Text style={styles.brandName}>ROYAL-VPN</Text>
-          <Text style={styles.tagline}>{isSignUp ? 'Create your account to get protected' : 'Welcome back. Sign in to connect'}</Text>
+          <Text style={styles.tagline}>{isSignUp ? 'Create your account — your first 3 days of Pro are free' : 'Welcome back. Sign in to connect'}</Text>
         </View>
 
         <Text style={styles.label}>Email</Text>
@@ -74,6 +81,23 @@ export default function AuthScreen() {
             <FontAwesome6 name={showPassword ? 'eye-slash' : 'eye'} size={15} color={colors.textMuted} />
           </Pressable>
         </View>
+
+        {isSignUp && (
+          <>
+            <Text style={styles.label}>Invite code (optional)</Text>
+            <TextInput
+              style={styles.input}
+              value={refCode}
+              onChangeText={(v) => setRefCode(v.toUpperCase())}
+              placeholder="From a friend — you both get free days"
+              placeholderTextColor={colors.textFaint}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              maxLength={12}
+              editable={!busy}
+            />
+          </>
+        )}
 
         {error && (
           <View style={styles.errorBox}>

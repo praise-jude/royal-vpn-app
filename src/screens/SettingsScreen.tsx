@@ -27,7 +27,7 @@ export default function SettingsScreen() {
   if (!user) return null;
   const paid = user.planId !== 'free';
   const planDetail = [
-    paid && user.planExpiresAt ? `Renews by ${fmtDate(user.planExpiresAt)}` : paid ? 'No expiry' : 'Upgrade for more devices',
+    user.lifetime ? 'Lifetime — no subscription needed' : user.trial && user.planExpiresAt ? `Free trial until ${fmtDate(user.planExpiresAt)}` : paid && user.planExpiresAt ? `Active until ${fmtDate(user.planExpiresAt)}` : paid ? 'No expiry' : 'Upgrade for more devices & ad blocking',
     `${user.deviceLimit} device${user.deviceLimit === 1 ? '' : 's'}`,
   ].join(' · ');
 
@@ -41,22 +41,27 @@ export default function SettingsScreen() {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.name} numberOfLines={1}>{user.email}</Text>
-          <Text style={styles.email}>{user.planName} plan</Text>
+          <Text style={styles.email}>{user.lifetime ? `${user.planName} · Lifetime` : user.trial ? `${user.planName} trial` : `${user.planName} plan`}</Text>
         </View>
       </View>
 
       <LinearGradient colors={[colors.blue, colors.orange]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.planCard}>
         <View style={styles.planHeader}>
           <FontAwesome6 name="crown" size={14} color="#fff" />
-          <Text style={styles.planLabel}>{user.planName.toUpperCase()} PLAN</Text>
+          <Text style={styles.planLabel}>{user.planName.toUpperCase()} {user.lifetime ? 'LIFETIME' : user.trial ? 'TRIAL' : 'PLAN'}</Text>
         </View>
         <Text style={styles.planDetail}>{planDetail}</Text>
-        <Pressable style={styles.manageBtn} onPress={() => navigation.navigate('Plans')}>
-          <Text style={styles.manageBtnText}>{paid ? 'Manage plan' : 'Upgrade'}</Text>
-        </Pressable>
+        {!user.lifetime && (
+          <Pressable style={styles.manageBtn} onPress={() => navigation.navigate('Plans')}>
+            <Text style={styles.manageBtnText}>{user.trial || !paid ? 'Upgrade' : 'Renew or change plan'}</Text>
+          </Pressable>
+        )}
       </LinearGradient>
 
       <View style={styles.list}>
+        <SettingsRow icon="gift" label="Invite friends" detail="Free days for you both" onPress={() => navigation.navigate('Invite')} />
+        {!user.lifetime && <SettingsRow icon="ticket" label="Use a voucher code" onPress={() => navigation.navigate('Plans')} />}
+        {user.isAdmin && <SettingsRow icon="chart-line" label="Sales & agent vouchers" detail="Admin" onPress={() => navigation.navigate('Admin')} />}
         <SettingsRow icon="key" label="Change password" onPress={() => setChanging((v) => !v)} />
         <SettingsRow icon="headset" label="Royal Support" detail={SUPPORT_EMAIL} onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Royal-VPN%20support`)} />
         <SettingsRow icon="shield-halved" label="Privacy policy" detail="No activity logs" onPress={() => Linking.openURL(PRIVACY_URL)} />
@@ -70,7 +75,7 @@ export default function SettingsScreen() {
         <Text style={styles.logoutText}>Log Out</Text>
       </Pressable>
 
-      <Text style={styles.version}>Royal-VPN v1.1.0</Text>
+      <Text style={styles.version}>Royal-VPN v1.2.0</Text>
     </ScrollView>
   );
 }

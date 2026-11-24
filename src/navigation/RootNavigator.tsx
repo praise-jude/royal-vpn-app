@@ -11,6 +11,8 @@ import SettingsScreen from '../screens/SettingsScreen';
 import PlansScreen from '../screens/PlansScreen';
 import AuthScreen from '../screens/AuthScreen';
 import SplitTunnelScreen from '../screens/SplitTunnelScreen';
+import InviteScreen from '../screens/InviteScreen';
+import AdminScreen from '../screens/AdminScreen';
 import TabBar, { TAB_BAR_HEIGHT } from './TabBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, radii } from '../theme';
@@ -92,6 +94,8 @@ export default function RootNavigator() {
               <Stack.Screen name="Tabs" component={Tabs} />
               <Stack.Screen name="Plans" component={PlansScreen} options={{ contentStyle: { backgroundColor: colors.bg, paddingTop: 58 } }} />
               <Stack.Screen name="SplitTunnel" component={SplitTunnelScreen} options={{ contentStyle: { backgroundColor: colors.bg, paddingTop: 58 } }} />
+              <Stack.Screen name="Invite" component={InviteScreen} options={{ contentStyle: { backgroundColor: colors.bg, paddingTop: 58 } }} />
+              <Stack.Screen name="Admin" component={AdminScreen} options={{ contentStyle: { backgroundColor: colors.bg, paddingTop: 58 } }} />
             </>
           ) : (
             <Stack.Screen name="Auth" component={AuthScreen} />

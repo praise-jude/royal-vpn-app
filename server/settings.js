@@ -8,10 +8,13 @@ const DEFAULTS = {
   PLAN_PRO_NGN: '6000',
   PLAN_FAMILY_NGN: '10000',
   PLAN_VIP_NGN: '20000',
+  PLAN_WEEKLY_NGN: '1500',
+  TRIAL_DAYS: '3',
+  REFERRAL_DAYS: '7',
 };
 
 // Settings read from the database. Anything else stays env-only.
-const KEYS = ['JWT_SECRET', 'REAL_SERVERS', 'GRANDFATHERED_EMAILS', 'KORAPAY_SECRET_KEY', 'PLAN_PRO_NGN', 'PLAN_FAMILY_NGN', 'PLAN_VIP_NGN', 'PLAN_DAYS', 'PUBLIC_URL'];
+const KEYS = ['JWT_SECRET', 'REAL_SERVERS', 'GRANDFATHERED_EMAILS', 'KORAPAY_SECRET_KEY', 'PLAN_PRO_NGN', 'PLAN_FAMILY_NGN', 'PLAN_VIP_NGN', 'PLAN_DAYS', 'PUBLIC_URL', 'PLAN_WEEKLY_NGN', 'TRIAL_DAYS', 'REFERRAL_DAYS', 'ADMIN_EMAILS'];
 
 async function loadSettings(db, env = process.env) {
   await db.query(`CREATE TABLE IF NOT EXISTS app_settings (

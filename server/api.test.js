@@ -8,7 +8,7 @@ const { createApi } = require('./api');
 const KEY = (n) => crypto.createHash('sha256').update(String(n)).digest('base64'); // 44 chars, valid WG key shape
 const SECRET = 'sk_test_royal';
 
-async function setup({ withPayments = true } = {}) {
+async function setup({ withPayments = true, env: extraEnv = {} } = {}) {
   const { PGlite } = await import('@electric-sql/pglite');
   const db = new PGlite();
   const peers = [];
@@ -30,6 +30,7 @@ async function setup({ withPayments = true } = {}) {
       { id: 'vip1', city: 'London', country: 'United Kingdom', flag: '🇬🇧', vip: true, statusHost: 'l', statusKey: 'k', wgHost: 'lon.example', wgPublicKey: KEY('srv2') },
     ]),
     GRANDFATHERED_EMAILS: 'boss@royal.test',
+    ...extraEnv,
   };
   const app = express();
   app.set('trust proxy', 'loopback');
@@ -205,5 +206,70 @@ test('delete account: needs the password, removes devices from the servers, eras
     assert.ok(t.peers.some(([m, k]) => m === 'DELETE' && k === KEY('dev1')), 'device removed from the exit servers');
     assert.equal((await t.call('POST', '/auth/login', { email: 'gone@example.com', password: 'password123' })).status, 401);
     assert.equal((await t.db.query("SELECT count(*)::int AS n FROM devices")).rows[0].n, 0);
+  } finally { t.close(); }
+});
+
+test('sales: free trial, weekly plan, invite rewards once, vouchers single-use, admin only', async () => {
+  const t = await setup({ env: { TRIAL_DAYS: '3', REFERRAL_DAYS: '7', PLAN_WEEKLY_NGN: '1500', ADMIN_EMAILS: 'boss@royal.test' } });
+  try {
+    // New account: 3-day Pro trial.
+    const a = (await t.call('POST', '/auth/signup', { email: 'inviter@x.co', password: 'password1' })).body;
+    assert.equal(a.user.planId, 'pro');
+    assert.equal(a.user.trial, true);
+    assert.ok(new Date(a.user.planExpiresAt) < new Date(Date.now() + 3.1 * 864e5));
+    const plans = (await t.call('GET', '/plans')).body;
+    assert.equal(plans.trialDays, 3);
+    assert.deepEqual(plans.plans.find((p) => p.id === 'weekly'), { id: 'weekly', name: 'Pro Weekly', amountNaira: 1500, devices: 3, days: 7 });
+    assert.ok(!plans.plans.some((p) => p.id === 'family'), 'plans without a price are hidden');
+
+    // Invite code: a wrong code is refused, the right one links the accounts.
+    const ref = (await t.call('GET', '/referral', undefined, a.token)).body;
+    assert.match(ref.code, /^[A-Z2-9]{6}$/);
+    assert.equal((await t.call('POST', '/auth/signup', { email: 'bad@x.co', password: 'password1', refCode: 'NOPE99' })).status, 400);
+    const b = (await t.call('POST', '/auth/signup', { email: 'friend@x.co', password: 'password1', refCode: ref.code.toLowerCase() })).body;
+    assert.equal((await t.call('GET', '/referral', undefined, a.token)).body.joined, 1);
+
+    // Friend buys the weekly plan: 7 days + 7 bonus days; the inviter gets 7 days added to their plan. Once only.
+    const aBefore = new Date((await t.call('GET', '/auth/me', undefined, a.token)).body.user.planExpiresAt);
+    const r1 = (await t.call('POST', '/payments/initialize', { planId: 'weekly' }, b.token)).body.reference;
+    assert.equal(t.charges.get(r1).amountKobo, 150000);
+    t.charges.get(r1).paid = true;
+    const v = (await t.call('GET', `/payments/verify/${r1}`, undefined, b.token)).body.user;
+    assert.equal(v.planId, 'weekly');
+    assert.equal(v.trial, false);
+    assert.ok(new Date(v.planExpiresAt) > new Date(Date.now() + 13.9 * 864e5));
+    const aAfter = new Date((await t.call('GET', '/auth/me', undefined, a.token)).body.user.planExpiresAt);
+    assert.ok(aAfter - aBefore > 6.9 * 864e5);
+    const r2 = (await t.call('POST', '/payments/initialize', { planId: 'weekly' }, b.token)).body.reference;
+    t.charges.get(r2).paid = true;
+    await t.call('GET', `/payments/verify/${r2}`, undefined, b.token);
+    assert.equal(new Date((await t.call('GET', '/auth/me', undefined, a.token)).body.user.planExpiresAt).getTime(), aAfter.getTime(), 'rewarded once');
+
+    // Vouchers: only admins make them; each works once.
+    assert.equal((await t.call('POST', '/admin/vouchers', { planId: 'pro', count: 2 }, a.token)).status, 403);
+    const boss = (await t.call('POST', '/auth/signup', { email: 'boss@royal.test', password: 'password1' })).body;
+    assert.equal(boss.user.isAdmin, true);
+    assert.equal(boss.user.lifetime, true);
+    const made = (await t.call('POST', '/admin/vouchers', { planId: 'pro', count: 2, agent: 'Tunde' }, boss.token)).body;
+    assert.equal(made.codes.length, 2);
+    assert.match(made.codes[0], /^RV-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    const c = (await t.call('POST', '/auth/signup', { email: 'buyer@x.co', password: 'password1' })).body;
+    const red = await t.call('POST', '/vouchers/redeem', { code: made.codes[0].toLowerCase().replace(/-/g, ' ') }, c.token);
+    assert.equal(red.status, 200);
+    assert.equal(red.body.user.planId, 'pro');
+    assert.equal(red.body.user.trial, false);
+    assert.ok(new Date(red.body.user.planExpiresAt) > new Date(Date.now() + 29 * 864e5));
+    assert.match((await t.call('POST', '/vouchers/redeem', { code: made.codes[0] }, b.token)).body.error, /already been used/);
+    assert.match((await t.call('POST', '/vouchers/redeem', { code: 'RV-AAAA-AAAA' }, b.token)).body.error, /not valid/);
+    assert.equal((await t.call('POST', '/vouchers/redeem', { code: made.codes[1] }, boss.token)).status, 400, 'lifetime VIP keeps codes for others');
+    const batches = (await t.call('GET', '/admin/vouchers', undefined, boss.token)).body.batches;
+    assert.equal(batches[0].used, 1);
+    assert.equal(batches[0].agent, 'Tunde');
+    const codes = (await t.call('GET', `/admin/vouchers/${batches[0].batch}`, undefined, boss.token)).body.codes;
+    assert.equal(codes.find((x) => x.usedBy).usedBy, 'buyer@x.co');
+    const stats = (await t.call('GET', '/admin/stats', undefined, boss.token)).body;
+    assert.equal(stats.revenue30dNaira, 3000);
+    assert.equal(stats.referralsPaid, 1);
+    assert.equal((await t.call('GET', '/admin/stats', undefined, c.token)).status, 403);
   } finally { t.close(); }
 });

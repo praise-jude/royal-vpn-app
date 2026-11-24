@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, ActivityIndicator, TextInput, StyleSheet } from 'react-native';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { colors, font, radii } from '../theme';
@@ -7,18 +7,21 @@ import { api, type Plan } from '../lib/api';
 import { startCheckout } from '../lib/payments';
 import { useAuthStore } from '../store/useAuthStore';
 
-type PlansResponse = { currency: string; days: number; paymentsEnabled: boolean; plans: Plan[] };
+type PlansResponse = { currency: string; days: number; paymentsEnabled: boolean; trialDays?: number; referralDays?: number; plans: Plan[] };
 
 const naira = (n: number) => `₦${n.toLocaleString('en-NG')}`;
 
 // Only what the server actually enforces: device count (shown above) and VIP-only locations.
 const BASE_PERKS = ['All standard locations', 'WireGuard encryption'];
+const PAID_PERKS = [...BASE_PERKS, 'Ad & tracker blocking'];
 const PERKS: Record<string, string[]> = {
   free: BASE_PERKS,
-  pro: BASE_PERKS,
-  family: [...BASE_PERKS, 'Share with your household'],
-  vip: [...BASE_PERKS, 'VIP-only locations'],
+  weekly: [...PAID_PERKS, 'Pay small, week by week'],
+  pro: PAID_PERKS,
+  family: [...PAID_PERKS, 'Share with your household'],
+  vip: [...PAID_PERKS, 'VIP-only locations'],
 };
+const per = (days: number) => (days === 7 ? 'week' : days === 30 ? 'month' : `${days} days`);
 
 export default function PlansScreen() {
   const navigation = useNavigation<any>();
@@ -32,6 +35,24 @@ export default function PlansScreen() {
   useEffect(() => {
     api<PlansResponse>('/plans', { auth: false }).then(setData).catch((e) => setLoadError(e.message));
   }, []);
+
+  const [voucher, setVoucher] = useState('');
+  const [redeeming, setRedeeming] = useState(false);
+  async function redeem() {
+    if (redeeming || !voucher.trim()) return;
+    setRedeeming(true);
+    setMessage(null);
+    try {
+      const r = await api<{ user: any; days: number; planName: string }>('/vouchers/redeem', { method: 'POST', body: { code: voucher } });
+      setUser(r.user);
+      setVoucher('');
+      setMessage({ kind: 'ok', text: `Voucher accepted: ${r.planName} for ${r.days} days. Enjoy!` });
+    } catch (e: any) {
+      setMessage({ kind: 'error', text: e?.message || 'Could not use that voucher.' });
+    } finally {
+      setRedeeming(false);
+    }
+  }
 
   async function buy(plan: Plan) {
     if (busyPlan) return;
@@ -60,8 +81,22 @@ export default function PlansScreen() {
       </Pressable>
       <Text style={styles.title}>Choose your plan</Text>
       <Text style={styles.subtitle}>
-        {data ? `Plans last ${data.days} days. Pay securely with Korapay.` : 'Loading plans…'}
+        {data ? 'Pay securely with card or bank transfer (Korapay), or use a voucher code.' : 'Loading plans…'}
       </Text>
+      {user?.trial && user.planExpiresAt && (
+        <View style={[styles.note, styles.noteOk]}><Text style={styles.noteText}>You're on a free Pro trial until {new Date(user.planExpiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}. Pick a plan to stay protected after that.</Text></View>
+      )}
+
+      <View style={styles.voucherCard}>
+        <Text style={styles.voucherTitle}>Have a voucher code?</Text>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TextInput style={styles.voucherInput} value={voucher} onChangeText={(v) => setVoucher(v.toUpperCase())} placeholder="RV-XXXX-XXXX" placeholderTextColor={colors.textFaint} autoCapitalize="characters" autoCorrect={false} maxLength={16} onSubmitEditing={redeem} />
+          <Pressable style={[styles.voucherBtn, redeeming && { opacity: 0.7 }]} onPress={redeem} disabled={redeeming}>
+            {redeeming ? <ActivityIndicator color="#000" /> : <Text style={styles.buyText}>Use</Text>}
+          </Pressable>
+        </View>
+        <Text style={styles.voucherHint}>Buy codes from a Royal-VPN agent or on WhatsApp, pay by transfer.</Text>
+      </View>
 
       {message && (
         <View style={[styles.note, message.kind === 'ok' ? styles.noteOk : styles.noteErr]}>
@@ -75,7 +110,7 @@ export default function PlansScreen() {
       {!data && !loadError && <ActivityIndicator color={colors.orange} style={{ marginTop: 30 }} />}
 
       {data?.plans.map((plan) => {
-        const current = user?.planId === plan.id;
+        const current = user?.planId === plan.id && !user?.trial;
         const buyable = plan.id !== 'free' && plan.amountNaira > 0 && data.paymentsEnabled;
         return (
           <View key={plan.id} style={[styles.card, current && styles.cardCurrent]}>
@@ -87,7 +122,7 @@ export default function PlansScreen() {
               </View>
               <Text style={styles.price}>
                 {plan.amountNaira ? naira(plan.amountNaira) : 'Free'}
-                {plan.amountNaira ? <Text style={styles.per}> / {data.days} days</Text> : null}
+                {plan.amountNaira ? <Text style={styles.per}> / {per(plan.days || data.days)}</Text> : null}
               </Text>
             </View>
             <Text style={styles.devices}>
@@ -133,4 +168,9 @@ const styles = StyleSheet.create({
   badgeText: { fontFamily: font.bold, fontSize: 9, color: colors.orange, letterSpacing: 0.5 },
   buy: { backgroundColor: colors.orange, borderRadius: 9999, paddingVertical: 12, alignItems: 'center', marginTop: 10 },
   buyText: { fontFamily: font.bold, fontSize: 14, color: '#000' },
+  voucherCard: { backgroundColor: colors.surfaceMuted, borderRadius: radii.xl, padding: 14, marginBottom: 14, gap: 8 },
+  voucherTitle: { fontFamily: font.semiBold, fontSize: 14, color: colors.textPrimary },
+  voucherInput: { flex: 1, backgroundColor: colors.surface, borderRadius: radii.md, paddingHorizontal: 12, paddingVertical: 10, fontFamily: font.semiBold, fontSize: 14, color: colors.textPrimary, letterSpacing: 1 },
+  voucherBtn: { backgroundColor: colors.orange, borderRadius: radii.md, paddingHorizontal: 18, justifyContent: 'center' },
+  voucherHint: { fontFamily: font.regular, fontSize: 11, color: colors.textMuted },
 });

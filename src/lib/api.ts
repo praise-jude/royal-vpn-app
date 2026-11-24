@@ -31,10 +31,13 @@ export const tokenStore = {
 
 export type User = {
   email: string;
-  planId: 'free' | 'pro' | 'family' | 'vip';
+  planId: 'free' | 'weekly' | 'pro' | 'family' | 'vip';
   planName: string;
   planExpiresAt: string | null;
   deviceLimit: number;
+  lifetime?: boolean;
+  trial?: boolean;
+  isAdmin?: boolean;
 };
 
 export type Server = {
@@ -50,7 +53,7 @@ export type Server = {
   activeUsers: number | null;
 };
 
-export type Plan = { id: User['planId']; name: string; amountNaira: number; devices: number };
+export type Plan = { id: User['planId']; name: string; amountNaira: number; devices: number; days: number };
 
 export type Device = {
   id: number;

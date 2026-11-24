@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { colors, font, radii } from '../theme';
 import { useVpnStore, useSelectedServer, fmtDuration } from '../store/useVpnStore';
 import { vpn, fmtBytes } from '../lib/vpn';
+import { useAuthStore } from '../store/useAuthStore';
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
@@ -21,6 +22,9 @@ export default function HomeScreen() {
   const setKillSwitch = useVpnStore((s) => s.setKillSwitch);
   const setBlockAds = useVpnStore((s) => s.setBlockAds);
   const server = useSelectedServer();
+  const user = useAuthStore((s) => s.user);
+  const free = !user || user.planId === 'free';
+  const trialDaysLeft = user?.trial && user.planExpiresAt ? Math.max(0, Math.ceil((new Date(user.planExpiresAt).getTime() - Date.now()) / 86400000)) : null;
 
   const connected = status === 'connected';
   const connecting = status === 'connecting';
@@ -68,6 +72,16 @@ export default function HomeScreen() {
         <FontAwesome6 name="shield-halved" size={20} color={colors.orange} />
         <Text style={styles.title}>ROYAL-VPN</Text>
       </View>
+
+      {(free || trialDaysLeft !== null) && (
+        <Pressable style={styles.promo} onPress={() => navigation.navigate('Plans')}>
+          <FontAwesome6 name="crown" size={13} color={colors.orange} />
+          <Text style={styles.promoText}>
+            {trialDaysLeft !== null ? `Free Pro trial: ${trialDaysLeft} day${trialDaysLeft === 1 ? '' : 's'} left. Keep Pro from ₦1,500/week` : 'Free plan · Get Pro for more devices & ad blocking'}
+          </Text>
+          <FontAwesome6 name="chevron-right" size={11} color={colors.orange} />
+        </Pressable>
+      )}
 
       <View style={styles.connectWrap}>
         <Pressable
@@ -134,9 +148,9 @@ export default function HomeScreen() {
             <FontAwesome6 name="power-off" size={12} color={colors.orange} />
             <Text style={styles.quickLabel}>Kill Switch {killSwitch ? 'On' : 'Off'}</Text>
           </Pressable>
-          <Pressable style={styles.quickChip} onPress={() => setBlockAds(!blockAds)}>
-            <FontAwesome6 name="ban" size={12} color={colors.orange} />
-            <Text style={styles.quickLabel}>Ad Block {blockAds ? 'On' : 'Off'}</Text>
+          <Pressable style={styles.quickChip} onPress={() => (free ? navigation.navigate('Plans') : setBlockAds(!blockAds))}>
+            <FontAwesome6 name={free ? 'lock' : 'ban'} size={12} color={colors.orange} />
+            <Text style={styles.quickLabel}>Ad Block {free ? '· Pro' : blockAds ? 'On' : 'Off'}</Text>
           </Pressable>
         </View>
       )}
@@ -166,6 +180,8 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18 },
   statusDot: { width: 8, height: 8, borderRadius: 9999 },
   statusText: { fontFamily: font.regular, fontSize: 13, color: colors.textSecondary },
+  promo: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,147,0,0.1)', borderRadius: radii.md, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12 },
+  promoText: { flex: 1, fontFamily: font.semiBold, fontSize: 12.5, color: colors.textPrimary },
   errorBox: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', backgroundColor: 'rgba(255,147,0,0.1)', borderRadius: radii.md, padding: 12, marginBottom: 14 },
   errorText: { fontFamily: font.regular, fontSize: 13, color: colors.textPrimary },
   errorLink: { fontFamily: font.semiBold, fontSize: 13, color: colors.orange, marginTop: 6 },

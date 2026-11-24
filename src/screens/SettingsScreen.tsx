@@ -60,6 +60,7 @@ export default function SettingsScreen() {
 
       <View style={styles.list}>
         <SettingsRow icon="gift" label="Invite friends" detail="Free days for you both" onPress={() => navigation.navigate('Invite')} />
+        <SettingsRow icon="phone" label="US & Canada number" detail="Texts + calls · from ₦5,000" onPress={() => navigation.navigate('Numbers')} />
         {!user.lifetime && <SettingsRow icon="ticket" label="Use a voucher code" onPress={() => navigation.navigate('Plans')} />}
         {user.isAdmin && <SettingsRow icon="chart-line" label="Sales & agent vouchers" detail="Admin" onPress={() => navigation.navigate('Admin')} />}
         <SettingsRow icon="key" label="Change password" onPress={() => setChanging((v) => !v)} />

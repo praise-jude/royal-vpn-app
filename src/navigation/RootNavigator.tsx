@@ -11,7 +11,8 @@ import SettingsScreen from '../screens/SettingsScreen';
 import PlansScreen from '../screens/PlansScreen';
 import AuthScreen from '../screens/AuthScreen';
 import SplitTunnelScreen from '../screens/SplitTunnelScreen';
-import TabBar from './TabBar';
+import TabBar, { TAB_BAR_HEIGHT } from './TabBar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, radii } from '../theme';
 import { useAuthStore } from '../store/useAuthStore';
 import { useVpnStore } from '../store/useVpnStore';
@@ -23,10 +24,14 @@ const Stack = createNativeStackNavigator();
 const navTheme = { ...DarkTheme, colors: { ...DarkTheme.colors, background: colors.bg } };
 
 function Tabs() {
+  // Keep content clear of the status bar at the top and of the tab bar + the phone's navigation bar at the bottom.
+  const insets = useSafeAreaInsets();
+  const top = Math.max(58, insets.top + 20);
+  const bottom = TAB_BAR_HEIGHT + Math.max(insets.bottom, 10) + 12;
   return (
     <Tab.Navigator
       tabBar={(props) => <TabBar {...props} />}
-      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.bg, paddingTop: 58, paddingBottom: 100 } }}
+      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.bg, paddingTop: top, paddingBottom: bottom } }}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Servers" component={ServersScreen} />

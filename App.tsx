@@ -8,6 +8,7 @@ import {
   Poppins_700Bold,
   Poppins_800ExtraBold,
 } from '@expo-google-fonts/poppins';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import RootNavigator from './src/navigation/RootNavigator';
 import { colors } from './src/theme';
 
@@ -29,9 +30,9 @@ export default function App() {
   }
 
   return (
-    <>
+    <SafeAreaProvider>
       <RootNavigator />
       <StatusBar style="light" />
-    </>
+    </SafeAreaProvider>
   );
 }

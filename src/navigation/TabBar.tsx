@@ -1,8 +1,12 @@
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { Text, Pressable, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { FontAwesome6 } from '@expo/vector-icons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { colors, font } from '../theme';
+
+// Height of the tab buttons themselves; the phone's own navigation bar (gesture strip or 3 buttons) is added below.
+export const TAB_BAR_HEIGHT = 64;
 
 const TAB_ICONS: Record<string, React.ComponentProps<typeof FontAwesome6>['name']> = {
   Home: 'house',
@@ -13,8 +17,10 @@ const TAB_ICONS: Record<string, React.ComponentProps<typeof FontAwesome6>['name'
 };
 
 export default function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+  const insets = useSafeAreaInsets();
+  const bottom = Math.max(insets.bottom, 10);
   return (
-    <BlurView intensity={40} tint="dark" style={styles.bar}>
+    <BlurView intensity={40} tint="dark" style={[styles.bar, { height: TAB_BAR_HEIGHT + bottom, paddingBottom: bottom }]}>
       {state.routes.map((route, index) => {
         const focused = state.index === index;
         const { options } = descriptors[route.key];
@@ -45,8 +51,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: 78,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 12,
     flexDirection: 'row',
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.08)',

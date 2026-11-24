@@ -4,7 +4,7 @@
 # Safe to run again: keeps existing keys, peers and status key.
 set -euo pipefail
 
-: "${API_IP:?set API_IP to the Royal-VPN API server's public IP (only it may reach the agent)}"
+: "${API_IP:?set API_IP to the public IP of the Royal-VPN API server (only it may reach the agent)}"
 : "${ID:?set ID, e.g. lag1}"
 : "${CITY:?set CITY}"
 : "${COUNTRY:?set COUNTRY}"

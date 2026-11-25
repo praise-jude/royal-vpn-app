@@ -6,6 +6,7 @@ import { colors, font, radii } from '../theme';
 import { useVpnStore, useSelectedServer, fmtDuration } from '../store/useVpnStore';
 import { vpn, fmtBytes } from '../lib/vpn';
 import { useAuthStore } from '../store/useAuthStore';
+import UpdateBanner from '../components/UpdateBanner';
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
@@ -72,6 +73,8 @@ export default function HomeScreen() {
         <FontAwesome6 name="shield-halved" size={20} color={colors.orange} />
         <Text style={styles.title}>ROYAL-VPN</Text>
       </View>
+
+      <UpdateBanner />
 
       {(free || trialDaysLeft !== null) && (
         <Pressable style={styles.promo} onPress={() => navigation.navigate('Plans')}>
